@@ -4,3 +4,7 @@ This repository contains the official codebase for the research paper titled "A 
 ## Introduction
 
 This codebase accompanies the research work conducted on the AGM and AGM<sub>HS</sub> dataset.
+
+## Citation
+
+If you use this code or the AGM dataset in your work, please consider citing our paper.
