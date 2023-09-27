@@ -1,0 +1,32 @@
+# Experimental vars
+exp_id: base_8_120_rotflip___refactor
+ds_remote_repo: deep-plants/AGM
+ds_local_repo: /workdir/agm-plant-classification/data/AGM 
+ds_save_to_local: false
+stratify: true
+result_dir: /workdir/baseline_species/results
+# Dataset vars
+ds_mean: [0.36797073900515825, 0.4997646251138504, 0.26248408302026566]
+ds_std: [0.18194517496156112, 0.20214607636275408, 0.17095115484747334]
+img_size: [120, 120]
+test_split: 0.2
+validation_split: 0.2
+split_type: "random" # "balanced"
+transforms: "rot_and_flip" #  "default"
+# Model vars
+arch: vit_base # vit_small, resnet
+patch_size: 8
+save_every_n: 10
+mlp_num_layers: 3
+mlp_hidden_size: [192, 96]
+# Training vars
+train: true
+epochs: 101
+batch_size: 240
+learning_rate: 0.0001
+use_weighted_loss: false
+resume_training: false
+checkpoint_path: null
+device: "cuda"
+cm_every_n: 2
+opt_weight_decay: 0.00001

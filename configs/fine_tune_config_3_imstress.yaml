@@ -1,0 +1,35 @@
+# Experimental vars
+exp_id: small_8_120_ft_imagenetptSUP_health
+ds_dir: ../AGM_patches_118/validation_patches
+result_dir: results
+checkpoint_path: /workdir/baseline_species/results/small_8_imgnet/dino_deitsmall8_pretrain_bb.pth
+pretrain: imagenet
+# Dataset vars
+ds_mean: [0.36797073900515825, 0.4997646251138504, 0.26248408302026566] # [0.3679849,  0.49978156, 0.26249473]
+ds_std: [0.18194517496156112, 0.20214607636275408, 0.17095115484747334] # [0.17977724, 0.19945147, 0.16737716]
+img_size: [224, 224]
+test: true
+test_split: 0.2
+validation_split: 0.2
+species_to_merge: {'124': ['215', '175', '174', '216', '158', '169', '255', '239', '240', '62', '112', '168', '20']}
+fine_tune_on: '124'
+repeat_ds: null
+# Model vars
+arch: vit_small
+patch_size: 8
+only_cls_token: true
+# FT vars
+simple_eval: false
+knn: true
+n_neighbors: 5
+svm: true
+linear: true
+mlp_num_layers: 3
+mlp_hidden_size: [192, 96]
+blocks_to_optimize: "head" # ["head", "blocks.11"]
+epochs: 31
+cm_every_n: 10
+batch_size: 64
+learning_rate: 0.0001
+use_weighted_loss: false
+device: "cuda:0"
