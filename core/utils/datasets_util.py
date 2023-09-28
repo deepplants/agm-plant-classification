@@ -3,217 +3,55 @@ from glob import glob
 from typing import List, Tuple, Dict
 from PIL import Image
 from torch.utils.data import Dataset
-import torch
 
-def find_classes(directory: str) -> Tuple[List[str], Dict[str, int]]:
-    """Finds the class folder names in a target directory.
-    
-    Assumes target directory is in standard image classification format.
 
-    Args:
-        directory (str): target directory to load classnames from.
+class CustomImageFolder(Dataset):
+    def __init__(self, root, transform=None, target_transform=None):
+        self.root = root
+        self.transform = transform
+        self.target_transform = target_transform
+        self.samples = self._load_samples()
+        self.class_to_idx = self._find_classes()
+        self.classes = list(self.class_to_idx.keys())
 
-    Returns:
-        Tuple[List[str], Dict[str, int]]: (list_of_class_names, dict(class_name: idx...))
-    
-    Example:
-        find_classes("food_images/train")
-        >>> (["class_1", "class_2"], {"class_1": 0, ...})
-    """
-    # 1. Get the class names by scanning the target directory
-    classes = sorted(entry.name for entry in os.scandir(directory) if entry.is_dir())
-    species = []
-    for i, class_ in enumerate(classes):
-        if i == 0:
-            species = sorted(entry.name for entry in os.scandir(os.path.join(directory, class_)) if entry.is_dir())
-        else:
-            hs = sorted(entry.name for entry in os.scandir(os.path.join(directory, class_)) if entry.is_dir())
-            if hs != species:
-                raise FileNotFoundError(f"Couldn't find any classes in {directory}.")
-            else:
+    def _load_samples(self):
+        samples = []
+        classes = os.listdir(self.root)
+        classes.sort()
+
+        for class_idx, class_name in enumerate(classes):
+            class_dir = os.path.join(self.root, class_name)
+            if not os.path.isdir(class_dir):
                 continue
 
-    # species = [item for sublist in species for item in sublist]
-    # species = sorted(set(species))
+            for image_name in os.listdir(class_dir):
+                image_path = os.path.join(class_dir, image_name)
+                samples.append((image_path, class_idx))
+
+        return samples
     
-    # 2. Raise an error if class names not found
-    if not classes:
-        raise FileNotFoundError(f"Couldn't find any classes in {directory}.")
-        
-    # 3. Crearte a dictionary of index labels (computers prefer numerical rather than string labels)
-    class_to_idx = {cls_name: i for i, cls_name in enumerate(classes)}
-    species_to_idx = {specie_name: i for i, specie_name in enumerate(species)}
-    return classes, class_to_idx, species, species_to_idx
+    def _find_classes(self):
+        classes = [d.name for d in os.scandir(self.root) if d.is_dir()]
+        classes.sort()
+        class_to_idx = {cls_name: i for i, cls_name in enumerate(classes)}
+        return class_to_idx
 
-# 1. Subclass torch.utils.data.Dataset
-class ImageFolderFT(Dataset):
-    
-    # 2. Initialize with a targ_dir and transform (optional) parameter
-    def __init__(self, targ_dir: str, transform=None, species_to_merge=None) -> None:
-        
-        # 3. Create class attributes
-        # Get all image paths
-        self.paths = self.get_image_paths(targ_dir) # note: you'd have to update this if you've got .png's or .jpeg's
-        # Setup transforms
-        self.transform = transform
-        # Create classes and class_to_idx attributes
-        self.classes, self.class_to_idx, self.species, self.species_to_idx = find_classes(targ_dir)
+    def __len__(self):
+        return len(self.samples)
 
-        self.species_to_merge = species_to_merge
+    def __getitem__(self, index):
+        image_path, target = self.samples[index]
 
-    # 4. Make function to load images
-    def load_image(self, index: int) -> Image.Image:
-        "Opens an image via a path and returns it."
-        image_path = self.paths[index]
-        return Image.open(image_path) 
-    
-    # 5. Overwrite the __len__() method (optional but recommended for subclasses of torch.utils.data.Dataset)
-    def __len__(self) -> int:
-        "Returns the total number of samples."
-        return len(self.paths)
-    
-    # 6. Overwrite the __getitem__() method (required for subclasses of torch.utils.data.Dataset)
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, int, int]:
-        "Returns one sample of data, data and label (X, y)."
-        img = self.load_image(index)
-        class_name = self.paths[index].split(os.sep)[-3] # expects path in data_folder/class_name/specie/image.jpeg
-        class_idx = self.class_to_idx[class_name]
-        specie_name  = self.paths[index].split(os.sep)[-2]
-        specie_idx = self.species_to_idx[specie_name]
-        if self.species_to_merge is not None:
-            for key, value in self.species_to_merge.items():
-                if specie_name == value:
-                    specie_idx = self.species_to_idx[key]
-                    break
+        with open(image_path, "rb") as f:
+            image = Image.open(f).convert("RGB")
 
-        # Transform if necessary
-        if self.transform:
-            return self.transform(img), class_idx, specie_idx # return data, label (X, y)
-        else:
-            return img, class_idx, specie_idx # return data, label (X, y)
-        
-    def get_image_paths(self, directory: str) -> List[str]:
-        image_paths = []
-        supported_extensions = ['*.jpg'] # , '*.jpeg', '*.png', '*.gif']  # Add more extensions if needed
+        if self.transform is not None:
+            image = self.transform(image)
 
-        for root, _, _ in os.walk(directory):
-            for extension in supported_extensions:
-                image_paths.extend(glob(os.path.join(root, extension)))
+        if self.target_transform is not None:
+            target = self.target_transform(target)
 
-        return image_paths
-
-
-class ImageFolderFT_OneClass(Dataset):
-    
-    # 2. Initialize with a targ_dir and transform (optional) parameter
-    def __init__(self, targ_dir: str, specie: str, transform=None, species_to_merge=None) -> None:
-        
-        self.species_to_merge = []
-        if species_to_merge is not None:
-            for key, value in species_to_merge.items():
-                if specie == key:
-                    for val in value:
-                        self.species_to_merge.append(val)
-                # if specie == value :
-                #     self.species_to_merge.append(key)
-                # elif specie == key:
-                #     self.species_to_merge.append(value)
-                else:
-                    continue
-                
-                    
-                    
-        self.classes = [f for f in os.listdir(targ_dir) if os.path.isdir(os.path.join(targ_dir, f))]
-        self.class_to_idx = {cls_name: i for i, cls_name in enumerate(self.classes)}
-        self.paths = self.get_image_paths(targ_dir, specie) # note: you'd have to update this if you've got .png's or .jpeg's
-        if self.species_to_merge:
-            for sp in self.species_to_merge:
-                self.paths.extend(self.get_image_paths(targ_dir, sp))
-        # Setup transforms
-        self.transform = transform       
-        self.species_to_merge = species_to_merge
-
-
-    # 4. Make function to load images
-    def load_image(self, index: int) -> Image.Image:
-        "Opens an image via a path and returns it."
-        image_path = self.paths[index]
-        return Image.open(image_path) 
-    
-    # 5. Overwrite the __len__() method (optional but recommended for subclasses of torch.utils.data.Dataset)
-    def __len__(self) -> int:
-        "Returns the total number of samples."
-        return len(self.paths)
-    
-    # 6. Overwrite the __getitem__() method (required for subclasses of torch.utils.data.Dataset)
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, int]:
-        "Returns one sample of data, data and label (X, y)."
-        img = self.load_image(index)
-        class_name = self.paths[index].split(os.sep)[-3] # expects path in data_folder/class_name/specie/image.jpeg
-        class_idx = self.class_to_idx[class_name]
-
-        # Transform if necessary
-        if self.transform:
-            return self.transform(img), class_idx # return data, label (X, y)
-        else:
-            return img, class_idx # return data, label (X, y)
-        
-    def get_image_paths(self, directory: str, specie: str) -> List[str]:
-        image_paths = []
-        
-        for class_ in self.classes:
-            image_paths.extend(glob(os.path.join(directory, class_, specie, '*.jpg')))
-
-        return image_paths
-    
-class ImageFolderSpecies(Dataset):
-        
-        # 2. Initialize with a targ_dir and transform (optional) parameter
-        def __init__(self, targ_dir: str, transform=None) -> None:
-            
-            # 3. Create class attributes
-            # Get all image paths
-            self.paths = self.get_image_paths(targ_dir) # note: you'd have to update this if you've got .png's or .jpeg's
-            # Setup transforms
-            self.transform = transform
-            # Create classes and class_to_idx attributes
-            self.classes, self.class_to_idx, self.species, self.species_to_idx = find_classes(targ_dir)
-    
-        # 4. Make function to load images
-        def load_image(self, index: int) -> Image.Image:
-            "Opens an image via a path and returns it."
-            image_path = self.paths[index]
-            return Image.open(image_path) 
-        
-        # 5. Overwrite the __len__() method (optional but recommended for subclasses of torch.utils.data.Dataset)
-        def __len__(self) -> int:
-            "Returns the total number of samples."
-            return len(self.paths)
-        
-        # 6. Overwrite the __getitem__() method (required for subclasses of torch.utils.data.Dataset)
-        def __getitem__(self, index: int) -> Tuple[torch.Tensor, int, int]:
-            "Returns one sample of data, data and label (X, y)."
-            img = self.load_image(index)
-            class_name = self.paths[index].split(os.sep)[-3] # expects path in data_folder/class_name/specie/image.jpeg
-            class_idx = self.class_to_idx[class_name]
-            specie_name  = self.paths[index].split(os.sep)[-2]
-            specie_idx = self.species_to_idx[specie_name]
-    
-            # Transform if necessary
-            if self.transform:
-                return self.transform(img), class_idx, specie_idx # return data, label (X, y)
-            else:
-                return img, class_idx, specie_idx # return data, label (X, y)
-            
-        def get_image_paths(self, directory: str) -> List[str]:
-            image_paths = []
-            supported_extensions = ['*.jpg'] # , '*.jpeg', '*.png', '*.gif']  # Add more extensions if needed
-    
-            for root, _, _ in os.walk(directory):
-                for extension in supported_extensions:
-                    image_paths.extend(glob(os.path.join(root, extension)))
-            
-            return image_paths
+        return {'image': image,'label': target}
         
 class ImageFolderPlantDoc(Dataset):
     def __init__(self, targ_dir: str, transform=None, split="train"):
@@ -246,9 +84,9 @@ class ImageFolderPlantDoc(Dataset):
         class_idx = self.labels[index][0]
 
         if self.transform:
-            return self.transform(img), class_idx
+            return {'image': self.transform(img),'label': class_idx}
         else:
-            return img, class_idx
+            return {'image': img,'label': class_idx}
         
 class ImageFolderPlantDocMultiLabel(Dataset):
     def __init__(self, targ_dir: str, transform=None, split="train"):
@@ -327,6 +165,6 @@ class ImageFolderPlantDocMultiLabel(Dataset):
         target = (self.species_to_idx[species], self.stresses_to_idx[stress])
 
         if self.transform:
-            return self.transform(img), target
+            return {'image': self.transform(img),'label': class_idx}
         else:
-            return img, target
+            return {'image': img,'label': target}

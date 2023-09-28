@@ -1,20 +1,19 @@
 import os
 from typing import Dict, List, Tuple
-from glob import glob
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader, random_split
 import torch
-import numpy as np
 import timm
 from torchvision import transforms
+from torchvision.models import resnet50
 from .train_util import load_from_url_or_disk, split_dataset
-from .datasets_util import ImageFolderPlantDoc, ImageFolderPlantDocMultiLabel
+from .datasets_util import ImageFolderPlantDoc, CustomImageFolder
 from ..model import vision_transformer as vits
 from datasets import ClassLabel
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
+import collections
 
 def split_ft_dataset(cfg, ds):
     # split dataset
@@ -38,14 +37,14 @@ def split_ft_dataset(cfg, ds):
     val_dl = DataLoader(val_ds, batch_size=cfg.batch_size, shuffle=True)
     if cfg.test:
         test_dl = DataLoader(test_ds, batch_size=cfg.batch_size, shuffle=True)
-
-    # In order to reduce fine tuning time we use only test_spli M images
-    if cfg.fine_tune_on == "species":
-        train_ds = test_ds
-        train_dl = test_dl
+    else:
+        test_ds = None
+        test_dl = None
 
     print(f"Train iterations per epoch: {len(train_dl)}")
     print(f"Validation iterations per epoch: {len(val_dl)}")
+
+    return train_ds, val_ds, test_ds, train_dl, val_dl, test_dl
 
 def get_finetune_sets(cfg: Dict):
 
@@ -84,13 +83,15 @@ def get_finetune_sets(cfg: Dict):
     elif cfg.fine_tune_on == "plant_doc":
         ds = ImageFolderPlantDoc(cfg.ds_local_repo, transform=transform)
         classes = ds.classes
-    elif cfg.fine_tune_on == "plant_doc_multilabel":
-        ds = ImageFolderPlantDocMultiLabel(cfg.ds_local_repo, transform=transform)
-        raise NotImplementedError("Multilabel fine tuning not supported yet")
-    elif cfg.fine_tune_on == "cassava":
-        from torchvision.datasets import ImageFolder
-        ds = ImageFolder(cfg.ds_local_repo, transform=transform)
+        class_to_idx = ds.class_to_idx
+    elif cfg.fine_tune_on == "rice_plant":
+        ds = CustomImageFolder(cfg.ds_local_repo, transform=transform)
         classes = ds.classes
+        class_to_idx = ds.class_to_idx
+    elif cfg.fine_tune_on == "cassava":
+        ds = CustomImageFolder(cfg.ds_local_repo, transform=transform)
+        classes = ds.classes
+        class_to_idx = ds.class_to_idx
     else:
         raise ValueError(f"Fine tune dataset {cfg.fine_tune_on} not supported.")
     
@@ -108,43 +109,58 @@ def get_finetune_sets(cfg: Dict):
     return train_ds, val_ds, test_ds, train_dl, val_dl, test_dl, classes, class_to_idx
 
 def get_pretrained_model(cfg: Dict, classes: List[str]) -> torch.nn.Module:
-    if cfg.checkpoint_path == "base":
-        model = timm.create_model('vit_base_patch8_224.augreg2_in21k_ft_in1k', pretrained=True)
-        print(f"Timm pretrained model loaded from {cfg.checkpoint_path}")
-    elif cfg.checkpoint_path == "small":
-        model = timm.create_model('vit_small_patch16_224.augreg_in21k_ft_in1k', pretrained=True)
-        print(f"Timm pretrained model loaded from {cfg.checkpoint_path}")
-    else:
-        model_ = vits.__dict__[cfg.arch](patch_size=cfg.patch_size, img_size=cfg.img_size)
-
-        # load pretrained weights
-        if cfg.pretrain == "agm":
-            if cfg.checkpoint_path:
-                checkpoint = torch.load(cfg.checkpoint_path, map_location="cpu")
-                new_state_dict = {}
-                for k, v in checkpoint.items():
-                    if k.startswith("0."):
-                        if k.startswith("0.head"):
-                            continue
-                        else:
-                            new_state_dict[k[2:]] = v
-                    elif k.startswith("1."):
+    if cfg.pretrain == "imagenet":
+        if cfg.arch == "vit_base":
+            model = timm.create_model('vit_base_patch8_224.augreg2_in21k_ft_in1k', pretrained=True)
+            model.head = torch.nn.Identity()
+            print(f"Timm pretrained model loaded: {cfg.arch}")
+        elif cfg.arch == "vit_small":
+            model = timm.create_model('vit_small_patch16_224.augreg_in21k_ft_in1k', pretrained=True)
+            model.head = torch.nn.Identity()
+            print(f"Timm pretrained model loaded: {cfg.arch}")
+        elif cfg.arch == "resnet":
+            model = timm.create_model('resnet50.a1_in1k', pretrained=True)
+            model.embed_dim = model.fc.in_features
+            model.fc = torch.nn.Identity()
+            print(f"Timm pretrained model loaded: {cfg.arch}")
+        else:
+            raise ValueError(f"Architecture {cfg.arch} not available pretrained on agm dataset.")
+    elif cfg.pretrain == "agm":
+        if cfg.arch in ["vit_base", "vit_small"]:
+            model_ = vits.__dict__[cfg.arch](patch_size=cfg.patch_size, img_size=cfg.img_size)
+            checkpoint = torch.load(cfg.checkpoint_path, map_location="cpu")
+            new_state_dict = {}
+            for k, v in checkpoint.items():
+                if k.startswith("0."):
+                    if k.startswith("0.head"):
                         continue
-
-                model_.load_state_dict(new_state_dict)
-                print(f"Loaded checkpoint from {cfg.checkpoint_path}")
-        elif cfg.pretrain == "imagenet":
+                    else:
+                        new_state_dict[k[2:]] = v
+                elif k.startswith("1."):
+                    continue
+            model_.load_state_dict(new_state_dict)
+            print(f"Loaded checkpoint from {cfg.checkpoint_path}")
+            
+            if not cfg.only_cls_token:
+                model = lambda x: model_(x, return_cls=False)[:,1:]
+            else:
+                model = model_
+        elif cfg.arch == "resnet":
+            model = resnet50(pretrained=False)
+            model.embed_dim = model.fc.in_features
+            model.fc = torch.nn.Identity()
             state_dict = torch.load(cfg.checkpoint_path)
-            model_.load_state_dict(state_dict, strict=False)
+            model.load_state_dict(state_dict, strict=False)
             print(f"Loaded checkpoint from {cfg.checkpoint_path}")
 
-        if not cfg.only_cls_token:
-            model = lambda x: model_(x, return_cls=False)[:,1:]
         else:
-            model = model_
+            raise ValueError(f"Architecture {cfg.arch} not available pretrained on agm dataset.")
+    else:
+        raise ValueError(f"Pretraining {cfg.pretrain} not supported; supported pretrain are 'agm' and 'imagenet'.")
 
     # attach new head
-    model.head = vits.MLP(model.embed_dim, len(classes), cfg.mlp_num_layers, cfg.mlp_hidden_size)
+    head = vits.MLP(model.embed_dim, len(classes), cfg.mlp_num_layers, cfg.mlp_hidden_size)
+    model = torch.nn.Sequential(collections.OrderedDict([('model', model), ('head', head)]))
 
     return model
 

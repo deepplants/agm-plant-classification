@@ -11,10 +11,7 @@ import os
 import sys
 import argparse
 import warnings
-from core.model import vision_transformer as vits
 from core.utils.fine_tune_utils import get_finetune_sets, get_pretrained_model, run_classifier
-from core.utils.datasets_util import find_classes
-from time import time
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
@@ -29,7 +26,7 @@ def get_optimization_parameters(model, blocks_to_optimize):
                 param.requires_grad = True
                 params_to_optimize.append(param)
                 # print("\t Head: ",name)
-            elif name.startswith(blocks_to_optimize):
+            elif blocks_to_optimize in name:
                 param.requires_grad = True
                 params_to_optimize.append(param)
                 print("\t Head: ",name)
@@ -89,13 +86,12 @@ def run(cfg: DictConfig, specie) -> None:
         # move model to device
         model = model.to(cfg.device)
         print(f"Training model on {cfg.device}")
-        model.head = model.head.to(cfg.device)
-        print(f"Training head on {cfg.device}")
+
         if cfg.blocks_to_optimize:
             print(f"Optimizing blocks: {cfg.blocks_to_optimize}")
             params_to_optimize = get_optimization_parameters(model, cfg.blocks_to_optimize)
         else:
-            params_to_optimize = list(model.parameters()) + list(model.head.parameters())
+            params_to_optimize = list(model.parameters())
 
         # create optimizer
         optimizer = optim.Adam(params_to_optimize, lr=cfg.learning_rate)
@@ -108,18 +104,15 @@ def run(cfg: DictConfig, specie) -> None:
         for epoch in range(cfg.epochs):
             print(f"Epoch {epoch+1}/{cfg.epochs}")
             # train
-            model.train()
+            # model.train()
             train_loss = 0
             train_acc = 0
-            for x, y in tqdm(train_dl):
+            for i, data in tqdm(enumerate(train_dl)):
+                x, y = data['image'], data['label']
                 x = x.to(cfg.device)
                 y = y.to(cfg.device)
                 optimizer.zero_grad()
-                if cfg.pretrain == "imagenet":
-                    y_hat = model(x) # for imagenet pt SUP model
-                else:
-                    feats = model(x)
-                    y_hat = model.head(feats)
+                y_hat = model(x)
                 loss = loss_fn(y_hat, y.long())
                 loss.backward()
                 optimizer.step()
@@ -130,20 +123,17 @@ def run(cfg: DictConfig, specie) -> None:
             train_acc = train_acc.item() / len(train_ds)
 
             # validate
-            model.eval()
+            # model.eval()
             val_loss = 0
             val_acc = 0
             y_true = []
             y_pred = []
-            for x, y in val_dl:
+            for i, data in tqdm(enumerate(train_dl)):
+                x, y = data['image'], data['label']
                 x = x.to(cfg.device)
                 y = y.to(cfg.device)
                 with torch.no_grad():
-                    if cfg.pretrain == "imagenet":
-                        y_hat = model(x) # for imagenet pt SUP model
-                    else:
-                        feats = model(x)
-                        y_hat = model.head(feats)
+                    y_hat = model(x)
                     loss = loss_fn(y_hat, y)
                     _, preds = torch.max(y_hat, 1)
                     val_loss += loss.item()

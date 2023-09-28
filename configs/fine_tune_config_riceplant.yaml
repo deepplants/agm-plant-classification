@@ -1,7 +1,7 @@
 # Experimental vars
 exp_id: refactor_test
 ds_remote_repo: deep-plants/AGM_HS
-ds_local_repo: /workdir/PlantDoc
+ds_local_repo: /workdir/RicePlant
 ds_save_to_local: false
 stratify: true
 result_dir: results
@@ -10,13 +10,13 @@ pretrain: imagenet
 # Dataset vars
 ds_mean: [0.36797073900515825, 0.4997646251138504, 0.26248408302026566]
 ds_std: [0.18194517496156112, 0.20214607636275408, 0.17095115484747334]
-img_size: [224, 224]
+img_size: [120, 120]
 test: false
 test_split: 0.2
 validation_split: 0.2
-fine_tune_on:  plant_doc
+fine_tune_on:  rice_plant
 # Model vars
-arch: vit_small
+arch: resnet
 patch_size: 8
 only_cls_token: true
 # FT vars
