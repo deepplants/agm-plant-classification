@@ -12,28 +12,14 @@ import sys
 import argparse
 import warnings
 from core.model import vision_transformer as vits
-from core.utils.fine_tune_utils import find_classes, get_finetune_sets, get_pretrained_model, run_knn
+from core.utils.fine_tune_utils import get_finetune_sets, get_pretrained_model, run_classifier
+from core.utils.datasets_util import find_classes
 from time import time
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
 def main(cfg: DictConfig) -> None:
-    t0 = time()
-    if isinstance(cfg.fine_tune_on, str):
-        if cfg.fine_tune_on == "all":
-            _, _, classes, _ = find_classes(cfg.ds_dir)
-            for specie in classes:
-                t1 = time()
-                print(f"--- {specie}")
-                run(cfg, specie)
-                t2 = time()
-                print(f"--- {specie} took {t2-t1} seconds")
-                print("Total time elapsed: ", t2-t0)
-        else:
-            run(cfg, cfg.fine_tune_on)
-    elif isinstance(cfg.fine_tune_on, omegaconf.listconfig.ListConfig):
-        for specie in cfg.fine_tune_on:
-            run(cfg, specie)
+    run(cfg, cfg.fine_tune_on)
 
 def get_optimization_parameters(model, blocks_to_optimize):
     params_to_optimize = []
@@ -77,35 +63,29 @@ def run(cfg: DictConfig, specie) -> None:
         # log configuration
         with open(conf_log_file, "w") as f:
             f.write(omegaconf.OmegaConf.to_yaml(cfg))
+        
+        model = get_pretrained_model(cfg, classes)
 
-        if not cfg.simple_eval:
-            with open(log_file, "w") as f:
-                f.write("epoch,train_loss,train_acc,val_loss,val_acc\n")
-
-        if cfg.knn:
+        if cfg.knn or cfg.svm:
             # move model to device
             model = model.to(cfg.device)
             
-            run_knn(
+            run_classifier(
                 model, 
                 train_dl,
                 val_dl,
                 experiment_result_dir,
                 specie,
                 cfg.device,
-                num_classes = len(classes),
-                batch_size = cfg.batch_size,
-                num_epochs = cfg.epochs,
-                learning_rate = cfg.learning_rate,
                 n_neighbors = cfg.n_neighbors,
-                linear_layer = cfg.linear,
                 svm = cfg.svm,
                 knn = cfg.knn,
             )
             return
-        
-        model = get_pretrained_model(cfg, classes)
 
+        with open(log_file, "w") as f:
+            f.write("epoch,train_loss,train_acc,val_loss,val_acc\n")
+        
         # move model to device
         model = model.to(cfg.device)
         print(f"Training model on {cfg.device}")

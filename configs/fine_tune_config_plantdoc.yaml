@@ -1,0 +1,36 @@
+# Experimental vars
+exp_id: RM_small_8_120_ft_plant_doc
+ds_dir: ../PlantDoc
+result_dir: results
+checkpoint_path: results/small_8_120_randaug_mixup/ckpts/model_100.pth
+pretrain: agm
+# Dataset vars
+ds_mean: [0.50583147, 0.53447378, 0.45467375] # plant doc normalization
+ds_std: [0.21420199, 0.20708365, 0.22962874] # plant doc normalization
+img_size: [120, 120]
+test: false
+test_split: 0.2
+validation_split: 0.2
+species_to_merge: null # {'174': ['175'], '240': ['215', '168', '255'], '239': ['216', '169']} # {'124': ['215', '175', '174', '216', '158', '169', '255', '239', '240', '62', '112', '168', '20']} # null
+fine_tune_on: plant_doc # ['124', '174', '158', '239', '240', '62', '112', '20'] # all ['241'] 
+repeat_ds: 1
+# Model vars
+arch: vit_small
+patch_size: 8
+only_cls_token: true
+# FT vars
+simple_eval: false
+knn: true
+n_neighbors: 5
+svm: true
+linear: true
+mlp_num_layers: 3
+mlp_hidden_size: [192, 96]
+blocks_to_optimize: "head" # ["head", "blocks.11"]
+epochs: 61
+cm_every_n: 20
+batch_size: 64
+learning_rate: 0.001
+use_weighted_loss: false
+device: "cuda:0"
+

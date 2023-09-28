@@ -5,9 +5,11 @@ from PIL import Image
 from torch.utils.data import Dataset, DataLoader, random_split
 import torch
 import numpy as np
+import timm
 from torchvision import transforms
 from .train_util import load_from_url_or_disk, split_dataset
 from .datasets_util import ImageFolderPlantDoc, ImageFolderPlantDocMultiLabel
+from ..model import vision_transformer as vits
 from datasets import ClassLabel
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
@@ -47,60 +49,72 @@ def split_ft_dataset(cfg, ds):
 
 def get_finetune_sets(cfg: Dict):
 
-        transform = transforms.Compose([
-            transforms.Resize(cfg.img_size, interpolation=Image.BICUBIC),
-            transforms.ToTensor(),
-            transforms.Normalize(cfg.ds_mean, cfg.ds_std)
-        ])
+    transform = transforms.Compose([
+        transforms.Resize(cfg.img_size, interpolation=Image.BICUBIC),
+        transforms.ToTensor(),
+        transforms.Normalize(cfg.ds_mean, cfg.ds_std)
+    ])
 
-        # load dataset
-        if cfg.fine_tune_on == "agmhs":          
-            ds = load_from_url_or_disk(cfg.ds_remote_repo, cfg.ds_local_repo, cfg.ds_save_to_local)
-            class_names = sorted(ds['train'].unique("label"))
-            class_to_idx = ClassLabel(names=class_names)._str2int
-            classes = list(class_to_idx.keys())
-        elif cfg.fine_tune_on == "agm":
-            ds = load_from_url_or_disk(cfg.ds_remote_repo, cfg.ds_local_repo, cfg.ds_save_to_local)
-            class_names = sorted(ds['train'].unique("label"))
-            class_to_idx = ClassLabel(names=class_names)._str2int
-            classes = list(class_to_idx.keys())
-        elif cfg.fine_tune_on == "plant_doc":
-            ds = ImageFolderPlantDoc(cfg.ds_dir, transform=transform)
-            classes = ds.classes
-        elif cfg.fine_tune_on == "plant_doc_multilabel":
-            ds = ImageFolderPlantDocMultiLabel(cfg.ds_dir, transform=transform)
-            raise NotImplementedError("Multilabel fine tuning not supported yet")
-        elif cfg.fine_tune_on == "cassava":
-            from torchvision.datasets import ImageFolder
-            ds = ImageFolder(cfg.ds_dir, transform=transform)
-            classes = ds.classes
-        else:
-            raise ValueError(f"Fine tune dataset {cfg.fine_tune_on} not supported.")
-        
-        if cfg.fine_tune_on in ["agm", "agmhs"]:
-            train_ds, val_ds, test_ds, train_dl, val_dl, test_dl = split_dataset(cfg, ds, collate_fn=None)
-            print(f"Found {len(train_ds)} training images and {len(val_ds) if val_ds else 0} validation images.")
-            print(f"Training iterations per epoch: {len(train_dl)}, Validation iterations per epoch {len(val_dl) if val_dl else 0}")
-            print(f"Available classes: {classes}")
-        else:
-            train_ds, val_ds, test_ds, train_dl, val_dl, test_dl = split_ft_dataset(cfg, ds)
-            print(f"Found {len(train_ds)} training images and {len(val_ds) if val_ds else 0} validation images.")
-            print(f"Training iterations per epoch: {len(train_dl)}, Validation iterations per epoch {len(val_dl) if val_dl else 0}")
-            print(f"Available classes: {classes}")
-        
-        return train_ds, val_ds, test_ds, train_dl, val_dl, test_dl, classes, class_to_idx
+    # Augmentations mapping function
+    def transform_ds(sample):
+        sample['image'] = [transform(x) for x in sample['image']]
+        return sample
+    
+    # Augmentations mapping function
+    def transform_ds_hs(sample):
+        sample['image'] = [transform(x) for x in sample['image']]
+        sample.pop('mask')
+        return sample
+
+    # load dataset
+    if cfg.fine_tune_on == "agm_hs":          
+        ds = load_from_url_or_disk(cfg.ds_remote_repo, cfg.ds_local_repo, cfg.ds_save_to_local)
+        ds['train'] = ds['train'].class_encode_column("label")
+        ds = ds.with_transform(transform_ds_hs)
+        class_names = sorted(ds['train'].unique("label"))
+        class_to_idx = ClassLabel(names=class_names)._str2int
+        classes = list(class_to_idx.keys())
+    elif cfg.fine_tune_on == "agm":
+        ds = load_from_url_or_disk(cfg.ds_remote_repo, cfg.ds_local_repo, cfg.ds_save_to_local)
+        ds['train'] = ds['train'].class_encode_column("label")
+        ds = ds.with_transform(transform_ds)
+        class_names = sorted(ds['train'].unique("label"))
+        class_to_idx = ClassLabel(names=class_names)._str2int
+        classes = list(class_to_idx.keys())
+    elif cfg.fine_tune_on == "plant_doc":
+        ds = ImageFolderPlantDoc(cfg.ds_local_repo, transform=transform)
+        classes = ds.classes
+    elif cfg.fine_tune_on == "plant_doc_multilabel":
+        ds = ImageFolderPlantDocMultiLabel(cfg.ds_local_repo, transform=transform)
+        raise NotImplementedError("Multilabel fine tuning not supported yet")
+    elif cfg.fine_tune_on == "cassava":
+        from torchvision.datasets import ImageFolder
+        ds = ImageFolder(cfg.ds_local_repo, transform=transform)
+        classes = ds.classes
+    else:
+        raise ValueError(f"Fine tune dataset {cfg.fine_tune_on} not supported.")
+    
+    if cfg.fine_tune_on in ["agm", "agm_hs"]:
+        train_ds, val_ds, test_ds, train_dl, val_dl, test_dl = split_dataset(cfg, ds, collate_fn=None)
+        print(f"Found {len(train_ds)} training images and {len(val_ds) if val_ds else 0} validation images.")
+        print(f"Training iterations per epoch: {len(train_dl)}, Validation iterations per epoch {len(val_dl) if val_dl else 0}")
+        print(f"Available classes: {classes}")
+    else:
+        train_ds, val_ds, test_ds, train_dl, val_dl, test_dl = split_ft_dataset(cfg, ds)
+        print(f"Found {len(train_ds)} training images and {len(val_ds) if val_ds else 0} validation images.")
+        print(f"Training iterations per epoch: {len(train_dl)}, Validation iterations per epoch {len(val_dl) if val_dl else 0}")
+        print(f"Available classes: {classes}")
+    
+    return train_ds, val_ds, test_ds, train_dl, val_dl, test_dl, classes, class_to_idx
 
 def get_pretrained_model(cfg: Dict, classes: List[str]) -> torch.nn.Module:
     if cfg.checkpoint_path == "base":
-        import timm
         model = timm.create_model('vit_base_patch8_224.augreg2_in21k_ft_in1k', pretrained=True)
         print(f"Timm pretrained model loaded from {cfg.checkpoint_path}")
     elif cfg.checkpoint_path == "small":
-        import timm
         model = timm.create_model('vit_small_patch16_224.augreg_in21k_ft_in1k', pretrained=True)
         print(f"Timm pretrained model loaded from {cfg.checkpoint_path}")
     else:
-        from ..model import vision_transformer as vits
         model_ = vits.__dict__[cfg.arch](patch_size=cfg.patch_size, img_size=cfg.img_size)
 
         # load pretrained weights
@@ -151,7 +165,8 @@ def extract_features(model, dataloader, device):
     features = []
     labels = []
     with torch.no_grad():
-        for inputs, targets in dataloader:
+        for i, data in enumerate(dataloader):
+            inputs, targets = data['image'], data['label']
             inputs = inputs.to(device)
             outputs = model(inputs)
             features.append(outputs)
@@ -165,11 +180,11 @@ def log_to_file(log_file, message):
         f.write(message + '\n')
 
 def run_classifier(feature_extractor, train_dataloader, val_dataloader, log_dir, run_id, device,
-         num_classes=2, batch_size=32, num_epochs=10, learning_rate=0.01, n_neighbors=3,
-         linear_layer=True, svm=True, knn=True):
+                     n_neighbors=3, svm=True, knn=True):
 
     log_file = os.path.join(log_dir, f'fine_tuning{run_id}.log')    
 
+    print(f"Extracting features for {'svm' if svm else ''}{'knn' if knn else ''} classifier")
     train_features, train_labels = extract_features(feature_extractor, train_dataloader, device)
     val_features, val_labels = extract_features(feature_extractor, val_dataloader, device)
 
