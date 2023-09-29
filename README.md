@@ -24,7 +24,18 @@ cd agm-plant-classification
 
 This codebase has been developed with python version 3.10, PyTorch version 2.0.1, CUDA 11.7 and torchvision 0.15.2.
 
-3. Download the necessary datasets (cassava, riceplant, or plantdoc) as mentioned in the Usage section.
+3. Download the necessary datasets (cassava, riceplant, or plantdoc) as mentioned in the Usage section for fine-tuning.
+
+4. Download our pretrained models on the AGM dataset:
+| Model           | Augmentation           | Training Acc. | Val Acc. |
+|------------------|----------------------|----------------|----------|
+| [ViT base8](https://drive.google.com/file/d/17llNvslEptPDuJ2dd9utZERknNm9Sq_p/view?usp=sharing)       | Randaug Mixup         | 0.995          | 0.970    |
+| [ViT small8](https://drive.google.com/file/d/1B5OmwA4kAh87N_BJifj6QkvwfztuKhA2/view?usp=sharing)      | Randaug Mixup         | 0.970          | 0.962    |
+| [ViT small8](https://drive.google.com/file/d/1dkDUInmXb143UOPQCAY6GOj-bDfjxPkY/view?usp=sharing)      | Rotations & Flippings | 0.995          | 0.972    |
+| [ViT small8](https://drive.google.com/file/d/16YlTdt3IBYvGEJh15dWenvPURNdAbe5n/view?usp=sharing)      | None                   | 0.996          | 0.968    |
+| [ResNet50](https://drive.google.com/file/d/1bc-XTZYCyxvlOlz4_quvioGvil80P4AE/view?usp=sharing)        | Randaug Mixup         | 0.951          | 0.914    |
+
+and specify their location in the config file.
 
 ## Usage
 You can use this codebase to pretrain a VIT model on AGM or fine-tune a pretrained model on other datasets such as cassava, riceplant, or plantdoc or AGM<sub>HS</sub>. Here are some examples:
