@@ -58,7 +58,7 @@ This project is licensed under the MIT License.
 ## Contact
 For any questions or inquiries, please contact 
 - nico@deepplants.com
-- etienne
+- etienne.david@agricolamoderna.com
 
 ## Citation
 

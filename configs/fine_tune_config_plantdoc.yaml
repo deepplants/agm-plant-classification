@@ -1,30 +1,30 @@
 # Experimental vars
-exp_id: refactor_test
-ds_remote_repo: deep-plants/AGM_HS
-ds_local_repo: /workdir/PlantDoc
-ds_save_to_local: false
-stratify: true
-result_dir: results
-checkpoint_path: /workdir/baseline_species/results/small_8_120_randaug_mixup/ckpts/model_100.pth
-pretrain: imagenet
+exp_id: EXP_ID  # Experiment ID
+ds_remote_repo: null
+ds_local_repo: path/to/Cassava/train # Local repo on the machine for Cassava the dataset
+ds_save_to_local: false # Whether to save the dataset locally
+stratify: true # Whether to stratify the dataset or randomly split it
+result_dir: path/to/results # Path to save the results
+checkpoint_path: path/to/checkpoint # Path to the AGM pretrained checkpoint to load (Imagenet pretrained checkpoint is loaded with timm)
+pretrain: agm # imagenet or agm 
 # Dataset vars
 ds_mean: [0.36797073900515825, 0.4997646251138504, 0.26248408302026566]
 ds_std: [0.18194517496156112, 0.20214607636275408, 0.17095115484747334]
-img_size: [224, 224]
-test: false
+img_size: [120, 120]
+test: true
 test_split: 0.2
 validation_split: 0.2
-fine_tune_on:  plant_doc
+fine_tune_on:  plant_doc # Dataset to fine-tune on (agm, agm_hs, cassava, plant_doc, rice_plant)
 # Model vars
-arch: vit_small
+arch: vit_base # vit_small, resnet
 patch_size: 8
 only_cls_token: true
 # FT vars
-knn: false
+knn: true # Train a KNN classifier on the features extracted from the model
 n_neighbors: 5
-svm: false
+svm: true # Train a SVM classifier on the features extracted from the model
 mlp_num_layers: 3
-mlp_hidden_size: [192, 96]
+mlp_hidden_size: [192, 96] #  Last layer has dim equal to the number of classes
 blocks_to_optimize: "head" # ["head", "blocks.11"]
 epochs: 11
 cm_every_n: 5
