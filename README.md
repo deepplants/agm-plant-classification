@@ -5,6 +5,8 @@ This repository contains the official codebase for the research paper titled "A 
 
 This codebase accompanies the research work conducted on the AGM and AGM<sub>HS</sub> dataset.
 
+![](assets/AGM_samples.png)
+
 ## Installation
 
 To install and set up the project, follow these steps:
