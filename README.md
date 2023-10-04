@@ -65,3 +65,13 @@ For any questions or inquiries, please contact
 ## Citation
 
 If you use this code or the AGM dataset in your work, please consider citing our paper.
+```bibtex
+@InProceedings{Sama_2023_ICCV,
+    author    = {Sama, Nico and David, Etienne and Rossetti, Simone and Antona, Alessandro and Franchetti, Benjamin and Pirri, Fiora},
+    title     = {A new Large Dataset and a Transfer Learning Methodology for Plant Phenotyping in Vertical Farms},
+    booktitle = {Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) Workshops},
+    month     = {October},
+    year      = {2023},
+    pages     = {540-551}
+}
+```
